@@ -165,12 +165,16 @@ export function registerSlackHandlers(app: App) {
     const buttonAction = action as ButtonAction;
     const { owner, repo, number } = JSON.parse(buttonAction.value || '{}');
 
+    // Extract channel and thread info
+    const channelId = body.channel?.id;
+    const threadTs = (body as any).message?.ts;
+
     await client.views.open({
       trigger_id: (body as any).trigger_id,
       view: {
         type: 'modal',
         callback_id: 'submit_comment_modal',
-        private_metadata: JSON.stringify({ owner, repo, number }),
+        private_metadata: JSON.stringify({ owner, repo, number, channelId, threadTs }),
         title: {
           type: 'plain_text',
           text: 'Add Comment',
@@ -201,7 +205,7 @@ export function registerSlackHandlers(app: App) {
   // 5. Handle Comment Submission
   app.view('submit_comment_modal', async ({ ack, view, client, body }) => {
     await ack();
-    const { owner, repo, number } = JSON.parse(view.private_metadata);
+    const { owner, repo, number, channelId, threadTs } = JSON.parse(view.private_metadata);
     const content = view.state.values.comment_input.content.value;
 
     try {
@@ -212,9 +216,13 @@ export function registerSlackHandlers(app: App) {
         body: content || '',
       });
 
-      // Notify in the thread confirming comment was posted could be nice, but we need the original message context.
-      // Since view submission doesn't carry the original message TS easily unless we pass it in metadata, we'll skip for now or rely on GitHub notifications.
-      // Ideally, the "Comment" button action could pass the channel/ts into metadata too.
+      if (channelId && threadTs) {
+          await client.chat.postMessage({
+              channel: channelId,
+              text: `💬 Comment added to PR #${number} by <@${body.user.id}>:\n> ${content}`,
+              thread_ts: threadTs,
+          });
+      }
 
     } catch (error) {
         console.error("Error posting comment", error);
