@@ -144,7 +144,7 @@ export function registerSlackHandlers(app: App) {
               type: 'modal',
               title: {
                   type: 'plain_text',
-                  text: filename.split('/').pop() || filename // Short name
+                  text: (filename.split('/').pop() || filename).substring(0, 24)
               },
               blocks: [
                   {
