@@ -78,7 +78,10 @@ receiver.router.post('/github/webhook', async (req, res) => {
   const event = req.headers['x-github-event'];
 
   if (event === 'pull_request') {
-     await handlePullRequest(req.body, app);
+     // Run asynchronously to avoid GitHub webhook timeout (10s)
+     handlePullRequest(req.body, app).catch(err => {
+         console.error('Error handling pull request:', err);
+     });
   }
 
   res.sendStatus(200);

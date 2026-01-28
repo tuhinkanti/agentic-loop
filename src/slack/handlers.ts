@@ -41,11 +41,12 @@ export function registerSlackHandlers(app: App) {
     const { owner, repo, number } = JSON.parse(buttonAction.value || '{}');
 
     try {
-       // Fetch files
+       // Fetch files (limit to 100 for now to capture more files than default 30)
       const { data: files } = await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}/files', {
         owner,
         repo,
         pull_number: number,
+        per_page: 100,
       });
 
       // Prepare file list blocks
@@ -104,19 +105,29 @@ export function registerSlackHandlers(app: App) {
       let patch = "No diff available.";
       try {
           // Re-fetch files to get the specific file's patch
-          // Note: In a real app with many files, we might want to paginate or filter by filename if possible,
-          // but List Pull Request Files endpoint paginates. We need to find the specific file.
-          // Alternatively, use 'GET /repos/{owner}/{repo}/contents/{path}' but that gives content, not diff.
-          // We will iterate through PR files again.
-          const { data: files } = await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}/files', {
-              owner,
-              repo,
-              pull_number: number,
-          });
+          // List Pull Request Files endpoint paginates. We need to find the specific file.
+          let foundFile: any = null;
+          let page = 1;
+          const perPage = 100;
 
-          const file = files.find((f: any) => f.filename === filename);
-          if (file && file.patch) {
-              patch = file.patch;
+          // Loop through pages (limit to 5 pages / 500 files to avoid infinite loops or excessive API calls)
+          while (!foundFile && page <= 5) {
+            const { data: files } = await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}/files', {
+                owner,
+                repo,
+                pull_number: number,
+                per_page: perPage,
+                page: page,
+            });
+
+            if (!files || files.length === 0) break;
+
+            foundFile = files.find((f: any) => f.filename === filename);
+            page++;
+          }
+
+          if (foundFile && foundFile.patch) {
+              patch = foundFile.patch;
           }
       } catch (e) {
           console.error("Error fetching file patch", e);
